@@ -1,0 +1,123 @@
+*&---------------------------------------------------------------------*
+*& Report ZIMPRESOR_ASA
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zimpresor_asa.
+INCLUDE zimpresor_asa_top.
+INCLUDE zimpresor_asa_s01.
+INCLUDE zimpresor_asa_f01.
+INCLUDE zimpresor_asa_event.
+
+///////////////////////////////////////////////////////////////////////////////
+
+*&---------------------------------------------------------------------*
+*& Include          ZIMPRESOR_ASA_TOP
+*&---------------------------------------------------------------------*
+DATA: date1         TYPE dats,
+      carrier1      TYPE s_carr_id,
+      connection1   TYPE s_conn_id.
+
+DATA: l_function    TYPE rs38l_fnam.
+
+DATA: it_sbook TYPE STANDARD TABLE OF zsbook_estru_corta_asa.
+
+///////////////////////////////////////////////////////////////////////////////
+
+*&---------------------------------------------------------------------*
+*& Include          ZIMPRESOR_ASA_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-000.
+  PARAMETERS: p_date TYPE dats,
+              p_carr TYPE s_carr_id.
+SELECTION-SCREEN END OF BLOCK b1.
+
+///////////////////////////////////////////////////////////////////////////////
+
+*&---------------------------------------------------------------------*
+*& Include          ZIMPRESOR_ASA_F01
+*&---------------------------------------------------------------------*
+
+FORM consulta_join  USING p_date
+                          p_carr
+
+                    CHANGING it_sbook.
+
+  SELECT s~customid, s~passname, s~class, s~loccuram, s~loccurkey, v~cityfrom, v~cityto
+    FROM sbook AS s
+    INNER JOIN spfli AS v
+    ON s~carrid = v~carrid
+    WHERE s~fldate = @p_date AND s~carrid = @p_carr
+
+    INTO TABLE @it_sbook
+    UP TO 20 ROWS.
+
+  ENDFORM.
+
+FORM imprimir_formulario.
+
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = 'ZPRUEBA_SMARTFORMS_ASA'
+*     variant            = space
+*     direct_call        = space
+    IMPORTING
+      fm_name            = l_function
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+  IF sy-subrc = 0.
+    CALL FUNCTION l_function
+      EXPORTING
+        fldate            = p_date
+        carrier           = p_carr
+
+        gs_sbook          = it_sbook
+      EXCEPTIONS
+        formatting_errorn = 1
+        internal_error    = 2
+        send_error        = 3
+        user_canceled     = 4
+        OTHERS            = 5.
+
+  ENDIF.
+
+ENDFORM.
+
+
+FORM main USING p_date TYPE dats
+                p_carr TYPE s_carr_id.
+
+  PERFORM consulta_join USING p_date
+                                p_carr
+
+                          CHANGING it_sbook.
+
+  IF it_sbook IS INITIAL.
+    MESSAGE TEXT-020 TYPE 'I'.
+  ELSE.
+    PERFORM imprimir_formulario.
+    IF sy-subrc NE 0.
+      WRITE: 'ERROR AL IMPRIMIR'.
+      WRITE: / SY-SUBRC.
+    ENDIF.
+  ENDIF.
+
+
+ENDFORM.
+
+///////////////////////////////////////////////////////////////////////////////
+
+START-OF-SELECTION.
+
+PERFORM main USING p_date
+                   p_carr.
+
+////////////////////////////////////////////////////////////////////////////////
